@@ -33,6 +33,7 @@ func New(w io.Writer) *Alog {
 		dest: w,
 		m: &sync.Mutex{},
 		errorCh: make(chan error),
+		msgCh: make(chan string),
 
 	}
 }
@@ -41,10 +42,8 @@ func New(w io.Writer) *Alog {
 // the caller from being blocked.
 func (al Alog) Start() {
 	for {
-		message := <-al.msgCh
-		go func() {
-			al.write(message, nil)
-		}()
+			message := <-al.msgCh
+			go al.write(message, nil)
 
 	}
 }
@@ -58,12 +57,12 @@ func (al Alog) formatMessage(msg string) string {
 
 func (al Alog) write(msg string, wg *sync.WaitGroup) {
 	al.m.Lock()
-	_, ok := al.dest.Write([]byte(al.formatMessage(msg)))
-	al.m.Unlock()
-	if ok != nil{
-		go func() {
-			al.errorCh <- ok
-		}()
+	defer al.m.Unlock()
+	_, err := al.dest.Write([]byte(al.formatMessage(msg)))
+	if err != nil{
+		go func(err error) {
+			al.errorCh <- err
+		}(err)
 	}
 }
 
